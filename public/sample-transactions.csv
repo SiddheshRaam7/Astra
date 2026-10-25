@@ -1,0 +1,4 @@
+date,merchant,amount,category,kind,pending
+2026-10-22,Campus Bookshop,24.50,Shopping,discretionary,false
+2026-10-23,Green Bowl,13.75,Dining,discretionary,false
+2026-10-24,Freelance illustration,-150.00,Income,income,false
