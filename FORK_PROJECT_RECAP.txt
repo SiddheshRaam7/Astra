@@ -1,0 +1,729 @@
+FORK PROJECT — COMPLETE WORK SESSION RECAP
+Generated: October 25, 2026
+
+===============================================================================
+1. EXECUTIVE SUMMARY
+===============================================================================
+
+FORK is now a functioning full-stack personal-finance application running both
+locally and as a production deployment on Vercel. The application combines a
+Next.js web interface, Auth0 authentication, PostgreSQL financial storage,
+Gemini-powered financial explanations, ElevenLabs voice interaction, and a
+Plaid banking integration.
+
+The live production application is currently available at:
+
+https://fork-financial-intelligence.vercel.app
+
+The source repository is:
+
+https://github.com/SiddheshRaam7/Astra.git
+
+The production Vercel project is named:
+
+fork-financial-intelligence
+
+The application is no longer configured as an anonymous public demo. Production
+has DEMO_MODE=false, Auth0 is required, and unauthenticated API requests return
+HTTP 401. Visitors to the homepage are redirected into the Auth0 sign-in flow.
+
+All production credentials were transferred from the local private .env.local
+file into Vercel's encrypted production environment after explicit approval.
+No credential values are included in this recap, committed to GitHub, or meant
+to be shared in chat.
+
+The production integration-status endpoint was tested inside an authenticated
+browser session and reported all five primary integrations as enabled:
+
+  - Gemini: true
+  - ElevenLabs: true
+  - Database: true
+  - Auth0: true
+  - Plaid: true
+
+Important limitation: the current Plaid implementation is still hardcoded to
+Plaid Sandbox. It is connected and functional for testing, but connecting real
+bank accounts requires Plaid Production approval, production credentials, and
+a small code/configuration update described later in this file.
+
+
+===============================================================================
+2. LOCAL PROJECT LOCATION AND TECHNOLOGY STACK
+===============================================================================
+
+Local project directory:
+
+/Users/tarunn.s/Desktop/Amazon online Hackathon./AI Autonomous Startup./Hackpsu-26
+
+Primary stack:
+
+  - Next.js 16.4.3
+  - React 19
+  - TypeScript
+  - Tailwind CSS
+  - PostgreSQL via postgres.js and Drizzle ORM
+  - Auth0 for authentication
+  - Google Gemini for financial reasoning and explanations
+  - ElevenLabs for voice interaction
+  - Plaid for bank-link and transaction synchronization
+  - Vercel for production hosting
+  - Tiger Data / Timescale PostgreSQL for the main financial database
+
+Notable project commands:
+
+  npm run dev
+      Starts the local Next.js development server on 127.0.0.1.
+
+  npm run build
+      Creates the production build using Next.js with webpack.
+
+  npm run typecheck
+      Runs the TypeScript compiler without emitting files.
+
+  npm test
+      Runs the Vitest test suite.
+
+  npm run db:migrate
+      Applies migrations/0001_initial.sql to DATABASE_URL.
+
+
+===============================================================================
+3. APPLICATION FUNCTIONALITY
+===============================================================================
+
+The product is a financial-clarity workspace, not merely a static landing page.
+It includes the following major areas:
+
+  - Overview dashboard
+  - Cash Flow
+  - Goal Planning
+  - Money Leaks
+  - Financial X-Ray
+  - Decision Simulator
+  - Finance-management forms
+  - Transaction import and bank synchronization
+  - AI financial assistant
+  - ElevenLabs voice assistant
+
+The Overview displays information such as:
+
+  - Safe-to-spend amount
+  - Available checking balance
+  - Monthly income
+  - Monthly expenses
+  - Goals, investments, and emergency contributions
+  - Spending pace gauge
+  - Recent wallet activity
+  - Upcoming payday
+
+Financial calculations are based on recorded user information. The application
+reserves money for essentials, planned goals, investing, emergency-fund
+contributions, pending transactions, upcoming bills, and a configured cash
+buffer before calculating spending room.
+
+The product language deliberately describes financial outputs as planning
+estimates rather than guaranteed financial advice.
+
+
+===============================================================================
+4. DATABASE WORK
+===============================================================================
+
+The main database used by the real application is the user's existing Tiger
+Data PostgreSQL service. DATABASE_URL is stored privately in .env.local for local
+development and in Vercel's encrypted Production environment for the hosted app.
+
+The Tiger database connection was tested successfully. The migration was
+applied and reported that the expected tables and indexes already existed. The
+migration is idempotent because it uses CREATE TABLE IF NOT EXISTS, CREATE INDEX
+IF NOT EXISTS, and CREATE OR REPLACE VIEW.
+
+Database schema includes:
+
+  - user_profiles
+  - financial_snapshots
+  - financial_accounts
+  - income_sources
+  - transactions
+  - expense_categories
+  - budgets
+  - goals
+  - recurring_payments
+  - emergency_funds
+  - scenario_simulations
+  - ai_action_logs
+  - plaid_items
+  - monthly_spending view
+
+The canonical per-user financial state is kept in financial_snapshots. Supporting
+tables mirror portions of that state for analytics and domain-specific queries.
+Writes use a version field and row locking to protect against conflicting edits.
+
+Plaid access tokens are never stored in plain text. They are encrypted with
+AES-256-GCM using TOKEN_ENCRYPTION_KEY before being written into plaid_items.
+
+An additional Neon database was created on Vercel's free plan during an earlier
+attempt to create an isolated public demo. It is named fork-public-demo-db. It
+was connected to the Vercel project, but the production DATABASE_URL was later
+overridden with the real Tiger Data connection after the decision was made to
+deploy the authenticated real product. Therefore, production currently uses
+Tiger, not the temporary Neon database. The Neon resource can be removed later
+if desired, but deletion was not performed automatically.
+
+
+===============================================================================
+5. AUTH0 AUTHENTICATION
+===============================================================================
+
+Auth0 was configured and is active in production.
+
+Auth0 tenant domain:
+
+dev-ng5phrbh5nz86x0n.us.auth0.com
+
+The actual client ID and client secret remain private and are intentionally not
+included here.
+
+Production Auth0 behavior:
+
+  - DEMO_MODE is false.
+  - Visitors without an Auth0 session are redirected to /auth/login.
+  - Unauthenticated API calls return HTTP 401.
+  - The Auth0 SDK handles /auth/login, /auth/callback, and /auth/logout through
+    the Next.js 16 proxy boundary.
+  - Authenticated sessions use secure HTTP-only cookies.
+
+The following production URLs were added to the Auth0 application allowlists:
+
+Allowed Callback URL:
+
+https://fork-financial-intelligence.vercel.app/auth/callback
+
+Allowed Logout URL:
+
+https://fork-financial-intelligence.vercel.app
+
+The existing localhost URLs were preserved so local development can continue:
+
+http://127.0.0.1:3000/auth/callback
+http://127.0.0.1:3000
+
+Auth0 displayed confirmation that the new settings were saved successfully.
+
+During live verification, a normal GET request to /auth/login returned HTTP 307
+and redirected to the correct Auth0 tenant. The redirect_uri in that request was
+the production callback URL above.
+
+One cosmetic issue remains: a newly initialized authenticated financial profile
+can display "Member" rather than the person's Auth0 name. This is no longer the
+old hardcoded demo name "Alex," but a future improvement should seed the profile
+name from the Auth0 identity when the database profile is first created.
+
+
+===============================================================================
+6. GEMINI AI INTEGRATION
+===============================================================================
+
+The Gemini API key is stored privately and verified. Earlier attempts failed
+because a non-Gemini key was pasted, but a valid key was ultimately accepted by
+scripts/configure-gemini-key.mjs and saved to .env.local.
+
+Production now has GEMINI_API_KEY in Vercel's encrypted environment.
+
+The code uses this default model unless GEMINI_MODEL is explicitly provided:
+
+gemini-3.8-flash
+
+This was updated from an unavailable older model after Gemini returned a 404
+stating that gemini-2.5-flash was no longer available to new users.
+
+Gemini supports the financial assistant and Financial X-Ray functionality. The
+application combines AI output with deterministic financial tools so responses
+can cite calculated values rather than relying entirely on free-form generation.
+
+The user's Gemini API project is linked to Google Cloud billing and the paid
+tier. Consequently, hosted Gemini calls may create usage charges. Usage limits
+and billing alerts should be configured in Google Cloud if they have not already
+been configured.
+
+
+===============================================================================
+7. ELEVENLABS VOICE INTEGRATION
+===============================================================================
+
+ElevenLabs is configured both locally and in Vercel Production.
+
+The configured agent identifier is:
+
+agent_3001m5rrp90neqya0wm9359zqf0j
+
+The secret API key is intentionally omitted.
+
+Several early attempts failed because the pasted value was either the key ID,
+did not begin with sk_, lacked signed-session permission, or returned HTTP 400 or
+401. A valid ElevenLabs secret key was eventually entered. The configuration
+script verified access and saved it privately.
+
+The voice interface was tested successfully. A bug was identified where silence
+could create a user message containing "..." and trigger an unnecessary assistant
+reply. That behavior was investigated during development and the voice workflow
+was retested successfully afterward.
+
+The production integration status currently reports ElevenLabs as connected.
+Because production calls use a paid third-party API, ElevenLabs account limits
+and spending controls should be reviewed before sharing the site widely.
+
+
+===============================================================================
+8. PLAID BANKING INTEGRATION
+===============================================================================
+
+Plaid credentials are configured locally and in Vercel Production. The app can:
+
+  - Create a Plaid Link token
+  - Exchange a public token for an access token
+  - Encrypt the access token before database storage
+  - Retrieve checking-account balances
+  - Synchronize transactions
+  - Merge added, modified, and removed transactions
+  - Avoid treating savings balances as spendable checking
+
+The current implementation in src/lib/server/plaid.ts uses:
+
+PlaidEnvironments.sandbox
+
+This means it is still a sandbox integration. It works with Plaid's test
+institutions and test credentials, not real consumer banks.
+
+To move to real banking later:
+
+  1. Apply for Plaid Production access in the Plaid dashboard.
+  2. Complete Plaid's company/product/compliance review.
+  3. Obtain the Production secret.
+  4. Add a PLAID_ENV configuration, preferably supporting sandbox, development,
+     and production rather than hardcoding one environment.
+  5. Update plaidClient() to select PlaidEnvironments.production when explicitly
+     configured.
+  6. Replace the Vercel PLAID_SECRET with the production secret.
+  7. Update the Link client_name from "FORK · Sandbox" to the production brand.
+  8. Test OAuth institutions and any required redirect URI.
+  9. Complete privacy-policy, consent, and data-retention requirements before
+     inviting real banking users.
+
+Do not simply switch the endpoint to production while retaining a sandbox key;
+the credentials and environment must match.
+
+
+===============================================================================
+9. VERCEL PRODUCTION DEPLOYMENT
+===============================================================================
+
+Vercel project:
+
+fork-financial-intelligence
+
+Vercel account/team:
+
+tarunnshetru
+
+Production URL:
+
+https://fork-financial-intelligence.vercel.app
+
+The project originally had temporary names including project-4yh6v and
+fork-public-demo. It was renamed to fork-financial-intelligence, and the clean
+fork-financial-intelligence.vercel.app alias was assigned to the successful
+production deployment.
+
+Vercel project settings:
+
+  - Framework preset: Next.js
+  - Node.js version: 24.x
+  - Build command: npm run build / Next.js default detection
+  - Application build script: next build --webpack
+  - Region: iad1 / Washington, D.C. area
+
+The Vercel CLI was installed from the official npm registry, authorized through
+the user's Vercel account, and linked to the existing project.
+
+The production deployment reached READY state. Vercel originally placed the
+deployment behind Vercel account authentication. After explicit approval, the
+Vercel SSO deployment protection was disabled so the public internet can reach
+the site. This does not remove application authentication: Auth0 still protects
+the financial workspace.
+
+Live verification results:
+
+  - Public homepage request: HTTP 307 redirect to /auth/login
+  - Unauthenticated /api/integrations request: HTTP 401
+  - GET /auth/login: HTTP 307 to the correct Auth0 authorize endpoint
+  - Authenticated browser session: application dashboard loaded successfully
+  - Authenticated /api/integrations: all five integrations returned true
+
+The live authenticated dashboard displayed stored financial information from
+the Tiger database and showed the private-workspace interface.
+
+
+===============================================================================
+10. PRODUCTION ENVIRONMENT VARIABLES
+===============================================================================
+
+The following names are configured in Vercel Production. Values are secret and
+must never be placed in this file, GitHub, screenshots, issues, or public chat.
+
+  DATABASE_URL
+  AUTH0_DOMAIN
+  AUTH0_CLIENT_ID
+  AUTH0_CLIENT_SECRET
+  AUTH0_SECRET
+  SESSION_SECRET
+  GEMINI_API_KEY
+  ELEVENLABS_API_KEY
+  ELEVENLABS_AGENT_ID
+  PLAID_CLIENT_ID
+  PLAID_SECRET
+  TOKEN_ENCRYPTION_KEY
+  APP_BASE_URL
+  DEMO_MODE
+
+Current important non-secret meanings:
+
+  APP_BASE_URL=https://fork-financial-intelligence.vercel.app
+  DEMO_MODE=false
+
+Vercel also contains DATABASE_* variables created by the optional Neon
+integration. The explicitly configured DATABASE_URL now points to Tiger and is
+the value used by the app.
+
+SESSION_SECRET is at least 32 characters and stabilizes signed server sessions.
+TOKEN_ENCRYPTION_KEY is a base64-encoded 32-byte key used for Plaid-token
+encryption. Rotating TOKEN_ENCRYPTION_KEY without re-encrypting stored Plaid
+tokens would make existing linked-bank tokens unreadable.
+
+
+===============================================================================
+11. SECURITY PROTECTIONS
+===============================================================================
+
+The following protections are in place:
+
+  - Production authentication is required through Auth0.
+  - Anonymous demo mode is disabled in production.
+  - API endpoints use identity checks.
+  - State-changing requests validate request origin.
+  - Auth cookies are HTTP-only, secure in production, and SameSite=Lax.
+  - Session values are HMAC-signed.
+  - Plaid access tokens are encrypted at rest using AES-256-GCM.
+  - Database state updates use versions and row locks.
+  - Financial API responses use Cache-Control: no-store.
+  - Security headers include HSTS, X-Frame-Options: DENY,
+    X-Content-Type-Options: nosniff, and a restrictive Permissions-Policy.
+  - .env.local is ignored by Git.
+  - Local .data financial snapshots are ignored by Git.
+  - .vercel is ignored by Git.
+  - .vercelignore prevents credentials, local financial data, build artifacts,
+    logs, and repository metadata from entering CLI deployment uploads.
+
+The .vercelignore file excludes:
+
+  .env*
+  .data/
+  node_modules/
+  .next/
+  .vercel/
+  .git/
+  test-results/
+  playwright-report/
+  *.tsbuildinfo
+  *.log
+
+The repository was checked to verify that .env.local and .data are ignored and
+not tracked.
+
+
+===============================================================================
+12. TESTING AND BUILD STATUS
+===============================================================================
+
+Latest verified local checks:
+
+  - Vitest: 31 tests passed across 3 test files
+  - TypeScript typecheck: passed
+  - Next.js production build: passed
+
+The build produced warnings from @auth0/nextjs-auth0 related to a dynamic DPoP
+dependency import. They are warnings rather than build failures. The build
+completed successfully, generated all expected routes, and deployed correctly.
+
+Routes generated by the production build included:
+
+  /
+  /[section]
+  /api/assistant
+  /api/finances
+  /api/integrations
+  /api/plaid
+  /api/voice
+  /api/xray
+  /icon.svg
+
+The Next.js 16 proxy is active and handles authentication boundaries.
+
+
+===============================================================================
+13. GITHUB BACKUP STATUS
+===============================================================================
+
+GitHub remote:
+
+https://github.com/SiddheshRaam7/Astra.git
+
+Branch:
+
+main
+
+An earlier project backup was pushed as commit:
+
+76509f8
+
+Deployment-safety rules were committed and pushed as:
+
+96c4cf2  chore: protect deployment secrets
+
+That commit added .vercelignore and strengthened .gitignore for Vercel's local
+project directory. The push updated origin/main successfully.
+
+No API keys, database passwords, Auth0 secrets, Plaid secrets, or personal
+financial snapshot files were included in the commit.
+
+Git displayed a warning that the commit author name/email were inferred from the
+Mac's local username and hostname. This does not affect the code, but Git author
+identity can be configured later with git config if a preferred public email is
+desired.
+
+
+===============================================================================
+14. CUSTOM DOMAIN PLAN: DIMEWILLTELL.COM
+===============================================================================
+
+The desired brand/domain direction is:
+
+dimewilltell.com
+
+The domain is not currently owned by the user. The intended registrar is
+GoDaddy, and the user has a GoDaddy promo code.
+
+The domain was not purchased during this session. A GoDaddy search was started,
+but the browser operation was interrupted before availability and exact checkout
+pricing were confirmed.
+
+GoDaddy's public domain-search page currently advertises a first-year .com offer
+for some eligible new customers, but actual availability, renewal price, taxes,
+and promo-code eligibility must be confirmed in the user's cart. Promotional
+first-year prices should never be confused with the annual renewal price.
+
+Recommended purchase process:
+
+  1. Search for dimewilltell.com directly on GoDaddy.
+  2. Confirm that the exact domain is available and is not a premium-priced
+     aftermarket domain.
+  3. Choose a one-year registration initially unless a multi-year purchase gives
+     a genuinely better total cost.
+  4. Decline unnecessary Website Builder, hosting, email, SSL, and paid domain
+     protection add-ons unless specifically wanted. Vercel already hosts the
+     site and supplies HTTPS certificates.
+  5. Keep basic WHOIS privacy enabled if included.
+  6. Apply the user's promo code directly in GoDaddy checkout; do not paste a
+     private one-time code into chat.
+  7. Review the renewal price and auto-renew setting.
+  8. The user must approve the final purchase and payment.
+
+After purchase, connect the domain to Vercel:
+
+  1. In Vercel, open fork-financial-intelligence.
+  2. Go to Settings -> Domains.
+  3. Add dimewilltell.com.
+  4. Also add www.dimewilltell.com.
+  5. Choose one as primary and redirect the other. A good default is to make
+     dimewilltell.com primary and redirect www to the apex domain.
+  6. Vercel will provide DNS records.
+  7. In GoDaddy DNS, add or modify only the records Vercel specifies.
+  8. Do not change nameservers unless intentionally moving all DNS management.
+  9. Wait for DNS propagation and Vercel certificate issuance.
+
+After Vercel verifies the domain, update production configuration:
+
+  APP_BASE_URL=https://dimewilltell.com
+
+Then add these Auth0 URLs:
+
+  Allowed Callback URL:
+  https://dimewilltell.com/auth/callback
+
+  Allowed Logout URL:
+  https://dimewilltell.com
+
+If www.dimewilltell.com will serve the application rather than only redirecting,
+add its callback/logout equivalents too. Keeping the old vercel.app URLs in
+Auth0 temporarily is useful for rollback and troubleshooting.
+
+Finally, redeploy Vercel so APP_BASE_URL takes effect and test:
+
+  - Homepage redirect
+  - Sign in
+  - Auth0 callback
+  - Sign out
+  - API authorization
+  - Origin validation on state-changing requests
+
+
+===============================================================================
+15. KNOWN LIMITATIONS AND RECOMMENDED IMPROVEMENTS
+===============================================================================
+
+1. Plaid is Sandbox-only.
+
+   This is the largest gap between the current deployment and a true real-bank
+   production application. Follow the Plaid Production process described above.
+
+2. The default authenticated display name can be "Member."
+
+   The hardcoded demo name "Alex" is no longer used in the real authenticated
+   flow. However, the initial database state for a newly authenticated user is
+   currently created with name: "Member." Improve readState/profile creation so
+   it uses the Auth0 session name on first creation while preserving subsequent
+   user edits.
+
+3. The temporary Neon database remains provisioned.
+
+   Production is using Tiger. If Neon is no longer wanted, remove the Vercel
+   integration/database later after independently confirming that DATABASE_URL
+   still points to Tiger. Deleting it is irreversible and should be done only
+   after that check.
+
+4. Provider billing controls should be configured.
+
+   Gemini paid tier and ElevenLabs may incur costs when public traffic grows.
+   Configure quotas, alerts, and spending limits in each provider dashboard.
+
+5. Auth0 trial status should be reviewed.
+
+   The Auth0 dashboard showed a trial banner with approximately 22 days left at
+   the time of setup. Confirm which features FORK uses and whether they are in
+   Auth0's free plan. Avoid accidental dependence on a trial-only feature.
+
+6. Add rate limiting.
+
+   Public AI and voice endpoints should have per-user and per-IP rate limits to
+   reduce abuse and unexpected API cost.
+
+7. Add production observability.
+
+   Configure structured error reporting and privacy-conscious logs. Never log
+   raw access tokens, API keys, authorization codes, financial records, or full
+   database connection URLs.
+
+8. Add a privacy policy and terms suitable for financial data.
+
+   This becomes especially important before real Plaid Production access or a
+   public launch to users beyond the development team.
+
+9. Add account/data deletion controls.
+
+   Users should eventually be able to disconnect Plaid, revoke stored access
+   tokens, export their data, and delete their account and financial data.
+
+10. Confirm product naming.
+
+    The interface is branded FORK, while the proposed public domain is
+    dimewilltell.com. Decide whether the product remains "FORK," becomes "A Dime
+    Will Tell," or uses one as the company/brand and the other as the product.
+    Update page metadata, Auth0 application name, Plaid client_name, ElevenLabs
+    agent copy, and social previews consistently after that decision.
+
+
+===============================================================================
+16. IMPORTANT SAFETY NOTES FOR FUTURE WORK
+===============================================================================
+
+Never paste secret values into GitHub issues, README files, this recap, public
+chat, screenshots, or browser URLs.
+
+If any credential was accidentally exposed publicly, rotate it immediately at
+the provider and replace the corresponding Vercel environment variable.
+
+Do not delete .env.local. It contains the local development configuration.
+
+Do not commit .env.local. It is intentionally ignored.
+
+Do not rotate TOKEN_ENCRYPTION_KEY casually. Existing Plaid access tokens depend
+on it.
+
+Do not set DEMO_MODE=true in production unless intentionally returning to an
+anonymous synthetic-data demo.
+
+Do not change APP_BASE_URL without updating Auth0's callback/logout allowlists.
+
+Do not point production DATABASE_URL at a disposable or preview database unless
+data migration and rollback are understood.
+
+Do not claim that Plaid is live for real banks until Plaid Production access has
+been approved and tested.
+
+
+===============================================================================
+17. IMMEDIATE NEXT STEPS
+===============================================================================
+
+The next practical sequence is:
+
+  1. Finish the GoDaddy availability search for dimewilltell.com.
+  2. Review the first-year price, renewal price, taxes, and promo-code result.
+  3. Purchase the domain, with the user personally approving checkout.
+  4. Add dimewilltell.com and www.dimewilltell.com to Vercel.
+  5. Configure the required GoDaddy DNS records.
+  6. Update Vercel APP_BASE_URL.
+  7. Add the custom-domain callback/logout URLs to Auth0.
+  8. Redeploy and test login, logout, authenticated APIs, and origin validation.
+  9. Decide whether the visible brand remains FORK or changes to match the new
+     domain.
+ 10. Apply for Plaid Production access when ready for real bank accounts.
+ 11. Add AI/voice rate limits and provider spending alerts before broad sharing.
+
+
+===============================================================================
+18. FINAL CURRENT STATE
+===============================================================================
+
+As of the end of this work session:
+
+  - The app builds successfully.
+  - Automated tests pass.
+  - TypeScript passes.
+  - The project is backed up on GitHub.
+  - The production deployment is READY on Vercel.
+  - The clean vercel.app URL is active.
+  - Vercel's account-only gate is disabled.
+  - Auth0 protects the actual application.
+  - Production Auth0 callbacks are configured.
+  - Tiger is the production database.
+  - Gemini is connected.
+  - ElevenLabs is connected.
+  - Plaid Sandbox is connected.
+  - Production demo mode is disabled.
+  - Secrets remain out of GitHub.
+  - dimewilltell.com has not yet been purchased or connected.
+
+Live site:
+
+https://fork-financial-intelligence.vercel.app
+
+Repository:
+
+https://github.com/SiddheshRaam7/Astra.git
+
+Local project:
+
+/Users/tarunn.s/Desktop/Amazon online Hackathon./AI Autonomous Startup./Hackpsu-26
+
+End of recap.
