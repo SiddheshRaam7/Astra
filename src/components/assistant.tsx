@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useConversation } from '@elevenlabs/react';
 import { AnimatePresence, motion } from 'motion/react';
 import { ArrowUp, AudioLines, Check, LoaderCircle, Mic, MicOff, Sparkles, X } from 'lucide-react';
@@ -39,6 +39,7 @@ export function Assistant({ open, setOpen }: { open: boolean; setOpen: (v: boole
   ]);
   const [input, setInput] = useState(''),
     [busy, setBusy] = useState(false),
+    [voiceBusy, setVoiceBusy] = useState(false),
     [error, setError] = useState(''),
     [muted, setMuted] = useState(false);
   const accept = useFinance((s) => s.accept);
@@ -72,12 +73,15 @@ export function Assistant({ open, setOpen }: { open: boolean; setOpen: (v: boole
   const conversation = useConversation({
     micMuted: muted,
     onMessage: (message) => {
+      const transcript = message.message.trim();
+      // Voice activity detection can send punctuation-only transcripts for silence/noise.
+      if (!/[\p{L}\p{N}]/u.test(transcript)) return;
       if (message.source === 'user')
-        setMessages((m) => [...m, { role: 'user', text: message.message }]);
+        setMessages((m) => [...m, { role: 'user', text: transcript }]);
       else
         setMessages((m) => [
           ...m,
-          { role: 'assistant', text: message.message, provider: 'ElevenLabs voice' },
+          { role: 'assistant', text: transcript, provider: 'ElevenLabs voice' },
         ]);
     },
     onError: (error) => {
@@ -86,24 +90,39 @@ export function Assistant({ open, setOpen }: { open: boolean; setOpen: (v: boole
       );
     },
     clientTools: {
-      askFork: async ({ message }: { message: string }) =>
-        (await ask(message)) ?? 'No response. Please use typed text.',
+      askFork: async ({ message }: { message?: unknown }) => {
+        if (typeof message !== 'string' || !message.trim())
+          return 'Please ask a clear financial question.';
+        return (await ask(message)) ?? 'No response. Please use typed text.';
+      },
     },
   });
+  useEffect(() => {
+    if (conversation.status !== 'connected') return;
+    const timeout = window.setTimeout(() => {
+      void conversation.endSession();
+      setError('Voice ended after five minutes to limit usage. Start another session if needed.');
+    }, 5 * 60 * 1000);
+    return () => window.clearTimeout(timeout);
+  }, [conversation.status]);
   async function voice() {
+    if (voiceBusy) return;
+    setVoiceBusy(true);
     setOpen(true);
     setError('');
-    if (conversation.status === 'connected') {
-      await conversation.endSession();
-      return;
-    }
     try {
+      if (conversation.status === 'connected') {
+        await conversation.endSession();
+        return;
+      }
       const data = await request('/api/voice', {});
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach((t) => t.stop());
       await conversation.startSession({ signedUrl: data.signedUrl, connectionType: 'websocket' });
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setVoiceBusy(false);
     }
   }
   async function confirm(index: number) {
@@ -273,9 +292,13 @@ export function Assistant({ open, setOpen }: { open: boolean; setOpen: (v: boole
               </Button>
             </form>
             <footer>
-              <button onClick={voice}>
+              <button onClick={voice} disabled={voiceBusy}>
                 <Mic size={16} />
-                {conversation.status === 'connected' ? 'End voice' : 'Start voice conversation'}
+                {voiceBusy
+                  ? 'Connecting…'
+                  : conversation.status === 'connected'
+                    ? 'End voice'
+                    : 'Start voice conversation'}
               </button>
               {conversation.status === 'connected' && (
                 <button
