@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import { motion } from 'motion/react';
 import {
   ArrowDownLeft,
   ArrowRight,
@@ -23,10 +24,29 @@ import { CardHeading, Progress, SectionTitle, Stat } from './shared';
 import { CashFlow } from './cash-flow';
 export function Speedometer({ state }: { state: FinancialState }) {
   const m = financialSummary(state),
-    angle = -90 + (Math.min(1.5, m.pace) / 1.5) * 180;
+    riskFloor =
+      m.speed === 'At Risk'
+        ? 0.94
+        : m.speed === 'Caution'
+          ? 0.76
+          : m.speed === 'On Track'
+            ? 0.54
+            : 0.08,
+    position = Math.max(riskFloor, Math.min(1, m.pace / 1.5)),
+    angle = -90 + position * 180,
+    radians = (angle * Math.PI) / 180,
+    needleX = 130 + 74 * Math.sin(radians),
+    needleY = 125 - 74 * Math.cos(radians);
   return (
     <div className="speedometer">
-      <svg viewBox="0 0 260 150" aria-label={`Spending pace: ${m.speed}`}>
+      <svg
+        viewBox="0 0 260 150"
+        role="meter"
+        aria-label={`Spending pace: ${m.speed}`}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(position * 100)}
+      >
         <path
           d="M 28 125 A 102 102 0 0 1 232 125"
           pathLength="100"
@@ -35,7 +55,7 @@ export function Speedometer({ state }: { state: FinancialState }) {
           strokeWidth="14"
           strokeLinecap="round"
         />
-        <path
+        <motion.path
           d="M 28 125 A 102 102 0 0 1 232 125"
           pathLength="100"
           fill="none"
@@ -43,6 +63,9 @@ export function Speedometer({ state }: { state: FinancialState }) {
           strokeWidth="14"
           strokeLinecap="round"
           strokeDasharray="100 100"
+          initial={false}
+          animate={{ strokeDashoffset: 100 - position * 100 }}
+          transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
         />
         <defs>
           <linearGradient id="gauge">
@@ -52,25 +75,18 @@ export function Speedometer({ state }: { state: FinancialState }) {
             <stop offset="100%" stopColor="#d88b80" />
           </linearGradient>
         </defs>
-        <g
-          style={{
-            transform: `rotate(${angle}deg)`,
-            transformOrigin: '130px 125px',
-            transition: 'transform 700ms cubic-bezier(0.22, 1, 0.36, 1)',
-          }}
-        >
-          <line
-            x1="130"
-            y1="125"
-            x2="130"
-            y2="51"
-            stroke="#edf3e8"
-            strokeWidth="3"
-            strokeLinecap="round"
-          />
-          <circle cx="130" cy="125" r="7" fill="#edf3e8" />
-          <circle cx="130" cy="125" r="3" fill="#1c251e" />
-        </g>
+        <motion.line
+          x1="130"
+          y1="125"
+          stroke="#edf3e8"
+          strokeWidth="3"
+          strokeLinecap="round"
+          initial={false}
+          animate={{ x2: needleX, y2: needleY }}
+          transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+        />
+        <circle cx="130" cy="125" r="7" fill="#edf3e8" />
+        <circle cx="130" cy="125" r="3" fill="#1c251e" />
         <text x="24" y="148" fill="#8c978f" fontSize="10">
           EASY DOES IT
         </text>
