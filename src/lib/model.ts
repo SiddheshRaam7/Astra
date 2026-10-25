@@ -81,6 +81,7 @@ export const stateSchema = z.object({
     syncedAt: z.string().nullable(),
     accountName: z.string().max(100),
     balanceAsOf: z.string().nullable(),
+    plaidScope: z.literal('checking-only-v1').optional(),
   }),
 });
 export type FinancialState = z.infer<typeof stateSchema>;

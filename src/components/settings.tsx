@@ -251,8 +251,9 @@ export function Settings({ onEdit }: { onEdit: (id: string) => void }) {
                 : 'A clearer view starts with a connection.'}
             </h3>
             <p>
-              Plaid Sandbox only. Connect synthetic bank accounts through Plaid Link. You never
-              enter bank passwords into FORK.
+              Plaid Sandbox only. Connect synthetic bank accounts through Plaid Link. Only USD
+              checking counts as spendable cash; savings stays out. You never enter bank passwords
+              into FORK.
             </p>
             <small>Last synchronized: {state.bank.syncedAt ?? 'Not connected'}</small>
             <Button

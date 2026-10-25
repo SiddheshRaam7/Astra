@@ -6,7 +6,13 @@ import { db, mutateState, readState } from '@/lib/server/store';
 import { plaidItems } from '@/lib/server/schema';
 import { decryptToken, encryptToken, plaidClient } from '@/lib/server/plaid';
 import { errorResponse } from '@/lib/server/http';
-import { deduplicate, isoDate, Transaction } from '@/lib/model';
+import { isoDate, Transaction } from '@/lib/model';
+import {
+  checkingBalanceCents,
+  mergeCheckingTransactions,
+  PLAID_CHECKING_SCOPE,
+  usdCheckingAccounts,
+} from '@/lib/server/plaid-sync';
 
 function convert(t: PlaidTransaction): Transaction {
   const group = t.personal_finance_category?.primary ?? '';
@@ -84,6 +90,9 @@ export async function POST(req: Request) {
     const items = await database.select().from(plaidItems).where(eq(plaidItems.userId, user.id));
     if (!items.length) throw new Error('Link a Plaid Sandbox bank first.');
     const current = await readState(user.id);
+    // Legacy syncs treated savings as spendable checking. Rebuild once from the
+    // beginning so already-saved savings transactions are removed as well.
+    const rebuildFromChecking = current.bank.plaidScope !== PLAID_CHECKING_SCOPE;
     const additions: Transaction[] = [];
     const removals = new Set<string>();
     const cursors: { itemId: string; cursor: string }[] = [];
@@ -91,19 +100,15 @@ export async function POST(req: Request) {
     const names: string[] = [];
     for (const item of items) {
       const token = decryptToken(item.encryptedToken);
-      let cursor = item.cursor ?? undefined;
+      let cursor = rebuildFromChecking ? undefined : (item.cursor ?? undefined);
       let more = true;
       let pages = 0;
       const accounts = await client.accountsBalanceGet({ access_token: token });
-      const checking = accounts.data.accounts.filter(
-        (a) => a.type === 'depository' && a.balances.iso_currency_code === 'USD',
-      );
+      const checking = usdCheckingAccounts(accounts.data.accounts);
       const ids = new Set(checking.map((a) => a.account_id));
-      balance += checking.reduce(
-        (v, a) => v + Math.round((a.balances.current ?? a.balances.available ?? 0) * 100),
-        0,
-      );
+      balance += checkingBalanceCents(checking);
       names.push(...checking.map((a) => a.name));
+      if (!checking.length) continue;
       while (more) {
         if (++pages > 100)
           throw new Error('Transaction sync exceeded its safety limit. Try again later.');
@@ -130,17 +135,18 @@ export async function POST(req: Request) {
       version: s.version + 1,
       asOf: isoDate(),
       balance: Math.max(0, balance),
-      transactions: deduplicate(
-        s.transactions.filter(
-          (t) => t.source !== 'demo' && !(t.externalId && removals.has(t.externalId)),
-        ),
+      transactions: mergeCheckingTransactions(
+        s.transactions,
         additions,
+        removals,
+        rebuildFromChecking,
       ),
       bank: {
-        connected: true,
+        connected: names.length > 0,
         syncedAt: timestamp,
         balanceAsOf: timestamp,
-        accountName: names.join(', ').slice(0, 100) || 'Sandbox bank',
+        accountName: names.join(', ').slice(0, 100) || 'No USD checking account linked',
+        plaidScope: PLAID_CHECKING_SCOPE,
       },
     }));
     // Cursor advances only after durable state save. Replays are deduplicated.
@@ -151,7 +157,9 @@ export async function POST(req: Request) {
         .where(and(eq(plaidItems.userId, user.id), eq(plaidItems.itemId, c.itemId)));
     return Response.json({
       state,
-      note: 'Sandbox data only. Non-income credits and transfers excluded pending reconciliation. Review transaction classifications. Sync is manual; no real-time webhook is configured.',
+      note: names.length
+        ? 'Sandbox data only. Only USD checking accounts count as spendable cash. Savings are excluded. Non-income credits and transfers require review. Sync is manual; no real-time webhook is configured.'
+        : 'No USD checking account was found. Savings are excluded from spendable cash; link a checking account to continue.',
     });
   } catch (e) {
     if (e && typeof e === 'object' && 'isAxiosError' in e)
