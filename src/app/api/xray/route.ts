@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     if (!valid) throw new Error('The file contents do not match its declared type.');
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     const result = await ai.models.generateContent({
-      model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+      model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
       contents: [
         {
           role: 'user',

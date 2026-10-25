@@ -122,6 +122,8 @@ svg {
   width: 224px;
   position: fixed;
   inset: 0 auto 0 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
   background: #141914;
   border-right: 1px solid var(--line);
   padding: 30px 17px 0;

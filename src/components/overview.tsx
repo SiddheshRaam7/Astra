@@ -52,7 +52,13 @@ export function Speedometer({ state }: { state: FinancialState }) {
             <stop offset="100%" stopColor="#d88b80" />
           </linearGradient>
         </defs>
-        <g transform={`rotate(${angle},130,125)`}>
+        <g
+          style={{
+            transform: `rotate(${angle}deg)`,
+            transformOrigin: '130px 125px',
+            transition: 'transform 700ms cubic-bezier(0.22, 1, 0.36, 1)',
+          }}
+        >
           <line
             x1="130"
             y1="125"
