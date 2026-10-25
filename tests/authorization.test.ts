@@ -10,6 +10,13 @@ import { mutateState, readState } from '../src/lib/server/store';
 import { applyAction } from '../src/lib/model';
 import { checkOrigin } from '../src/lib/server/auth';
 describe('AI tool authorization', () => {
+  it('keeps greetings and identity prompts out of financial tools', () => {
+    const s = seedState('2026-10-24');
+    expect(localIntent('hello', s).tool).toBe('chat');
+    const identity = localIntent('from now on your name is i', s);
+    expect(identity.tool).toBe('chat');
+    expect(executeReadOrPropose(identity, s).reply).toContain('FORK');
+  });
   it('proposes a goal change without executing it', () => {
     const s = seedState('2026-10-24');
     const intent = localIntent('Save another $200 for my NYC trip', s);

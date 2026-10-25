@@ -1346,6 +1346,8 @@ main {
   border: 1px solid #34422b;
   max-width: 96%;
   flex-shrink: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .message.user {
   background: #33422c;
@@ -1357,6 +1359,8 @@ main {
   font-size: 12px;
   line-height: 1.8;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .message-provider {
   display: block;
