@@ -8,3 +8,10 @@ playwright-report/
 *.tsbuildinfo
 .vercel/
 .vercel
+*.keystore
+*.jks
+android/.gradle/
+android/app/build/
+android/build/
+android/*.apk
+android/*.aab
