@@ -1,0 +1,11 @@
+# Never upload local credentials or financial snapshots with a CLI deployment.
+.env*
+.data/
+node_modules/
+.next/
+.vercel/
+.git/
+test-results/
+playwright-report/
+*.tsbuildinfo
+*.log
